@@ -1,0 +1,291 @@
+﻿@model assistbox.Models.ChatViewModel
+
+@{
+    ViewData["Title"] = "Glazed Skincare Chatbot";
+
+    // Retrieve the botResponsePending from the ViewModel (set by controller)
+    string botResponsePending = Model.BotResponsePending;
+}
+
+<style>
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #fce4ec; /* Soft pink background */
+        color: #333;
+        margin: 0;
+        padding: 20px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+    }
+
+    .chat-container {
+        background-color: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        width: 100%;
+        max-width: 600px;
+        height: 80vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .chat-header {
+        background-color: #ff80a0; /* Glazed Pink */
+        color: white;
+        padding: 15px 20px;
+        font-size: 1.2em;
+        font-weight: bold;
+        border-top-left-radius: 12px;
+        border-top-right-radius: 12px;
+        text-align: center;
+    }
+
+    .chat-messages {
+        flex-grow: 1;
+        padding: 20px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        background-color: #fdf5f8; /* Lighter pink */
+    }
+
+    .message {
+        padding: 10px 15px;
+        border-radius: 8px;
+        max-width: 75%;
+        word-wrap: break-word;
+        line-height: 1.4;
+    }
+
+        .message.user {
+            background-color: #e0f2f7; /* Light blue-grey */
+            align-self: flex-end;
+            text-align: right;
+        }
+
+        .message.bot {
+            background-color: #ffe0f0; /* Softest pink */
+            align-self: flex-start;
+        }
+
+    .chat-input-area {
+        border-top: 1px solid #eee;
+        padding: 15px 20px;
+        display: flex;
+        gap: 10px;
+        background-color: #fff;
+    }
+
+        .chat-input-area form { /* Apply flex to the form itself for input/button alignment */
+            display: flex;
+            width: 100%;
+            gap: 10px;
+        }
+
+        .chat-input-area input[type="text"] {
+            flex-grow: 1;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            font-size: 1em;
+            outline: none;
+        }
+
+        .chat-input-area button {
+            background-color: #ff80a0;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s ease;
+        }
+
+            .chat-input-area button:hover {
+                background-color: #ff668c;
+            }
+
+    .menu-options {
+        margin-top: 15px;
+        padding: 10px;
+        background-color: #f0f8ff; /* Light blue for options box */
+        border-radius: 8px;
+        border: 1px dashed #cfe2ff;
+        font-size: 0.9em;
+        max-width: 75%;
+        align-self: flex-start;
+    }
+
+        .menu-options strong {
+            color: #ff80a0;
+        }
+
+        .menu-options ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 5px 0 0 0;
+        }
+
+        .menu-options li {
+            margin-bottom: 5px;
+        }
+
+            .menu-options li:last-child {
+                margin-bottom: 0;
+            }
+
+    /* Typing effect styling */
+    .typing-cursor {
+        display: inline-block;
+        width: 6px;
+        height: 1em;
+        background-color: #333;
+        animation: blink 1s step-end infinite;
+        vertical-align: middle;
+        margin-left: 2px;
+    }
+
+    @@keyframes blink {
+        from, to {
+            background-color: transparent;
+        }
+
+        50% {
+            background-color: #333;
+        }
+    }
+</style>
+
+<div class="chat-container">
+    <div class="chat-header">
+        🍩 Glazed Skincare Chatbot
+    </div>
+    <div class="chat-messages" id="chat-messages">
+        @foreach (var message in Model.Messages)
+        {
+            <div class="message @(message.Sender.ToLower())">
+                @Html.Raw(message.Message.Replace("**", "<strong>").Replace("`", "<code>").Replace("\n", "<br/>"))
+            </div>
+        }
+
+        @* This is where the typing effect will appear for the CURRENT pending bot response *@
+        @if (!string.IsNullOrEmpty(Model.BotResponsePending))
+        {
+            <div class="message bot" id="typing-message">
+                <span id="typing-text"></span><span class="typing-cursor"></span>
+            </div>
+        }
+    </div>
+    <div class="chat-input-area">
+        <form asp-action="SendMessage" method="post" id="chat-form">
+            <input type="hidden" name="currentState" value="@Model.CurrentState" />
+            <input type="text" name="userInput" id="userInput" placeholder="@(Model.CurrentState == "AwaitingUserName" ? "Enter your name..." : "Type your message or option...")" required autofocus />
+            <button type="submit">Send</button>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Scroll to the bottom of the chat messages
+        function scrollToBottom() {
+            var chatMessages = document.getElementById('chat-messages');
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            scrollToBottom();
+
+            var typingMessageElement = document.getElementById('typing-message');
+            var typingTextElement = document.getElementById('typing-text');
+            // Get the bot response to type from the model property
+            var botResponsePending = `@Html.Raw(Model.BotResponsePending?.Replace("'", "\\'")?.Replace("\"", "\\\""))`;
+
+            if (typingMessageElement && typingTextElement && botResponsePending) {
+                let i = 0;
+                let speed = 20; // Typing speed in milliseconds
+
+                function typeWriter() {
+                    if (i < botResponsePending.length) {
+                        // Handle bold markdown and line breaks during typing
+                        let char = botResponsePending.charAt(i);
+                        if (char === '*' && botResponsePending.substring(i, i + 2) === '**') {
+                            typingTextElement.innerHTML += '<strong>';
+                            i += 2;
+                        } else if (botResponsePending.substring(i - 2, i) === '**' && char !== '*') { // Closing bold tag
+                            typingTextElement.innerHTML += '</strong>';
+                            // i already incremented for char, so no need to skip '**' here
+                        } else if (char === '\n') { // Handle newline character
+                            typingTextElement.innerHTML += '<br/>';
+                            i++;
+                        }
+                        else {
+                            typingTextElement.innerHTML += char;
+                            i++;
+                        }
+                        scrollToBottom();
+                        setTimeout(typeWriter, speed);
+                    } else {
+                        // Final check to ensure all bold tags are closed
+                        typingTextElement.innerHTML = typingTextElement.innerHTML.replace(/<strong>/g, '<strong>').replace(/<\/strong>/g, '</strong>');
+                        typingTextElement.innerHTML = typingTextElement.innerHTML.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'); // Catch any missed bold
+                        typingTextElement.innerHTML = typingTextElement.innerHTML.replace(/\n/g, '<br/>'); // Final check for newlines
+
+                        // Remove the typing cursor once typing is complete
+                        const cursor = typingTextElement.nextElementSibling;
+                        if (cursor && cursor.classList.contains('typing-cursor')) {
+                            cursor.remove();
+                        }
+
+                        // Add menu options if in AwaitingMenuChoice state and not already present
+                        if ('@Model.CurrentState' === 'AwaitingMenuChoice') {
+                            // Check if a menu options div already exists
+                            if (!document.querySelector('.menu-options')) {
+                                let menuOptionsHtml = '<div class="message bot menu-options"><strong>Main Menu:</strong><ul>';
+        @foreach (var option in Model.MenuOptions)
+        {
+            <text>
+                                            menuOptionsHtml += '<li>' + '@option' + '</li>';
+            </text>
+        }
+                                menuOptionsHtml += '</ul></div>';
+
+                                document.getElementById('chat-messages').insertAdjacentHTML('beforeend', menuOptionsHtml);
+                                scrollToBottom();
+                            }
+                        }
+                    }
+                }
+                typeWriter();
+            } else if ('@Model.CurrentState' === 'AwaitingMenuChoice') {
+                 // If there's no pending response but we are in AwaitingMenuChoice, and the main greeting is in history
+                 // (or if it's a direct state change like 'menu' command), ensure menu options are shown.
+                 // This handles cases where the menu is shown without a typing animation.
+                if (!document.querySelector('.menu-options')) {
+                    let menuOptionsHtml = '<div class="message bot menu-options"><strong>Main Menu:</strong><ul>';
+        @foreach (var option in Model.MenuOptions)
+        {
+            <text>
+                                menuOptionsHtml += '<li>' + '@option' + '</li>';
+            </text>
+        }
+                    menuOptionsHtml += '</ul></div>';
+
+                    document.getElementById('chat-messages').insertAdjacentHTML('beforeend', menuOptionsHtml);
+                    scrollToBottom();
+                }
+            }
+        });
+
+        // Function to select menu option and populate input (if you add buttons later)
+        window.selectMenuOption = function(optionText) {
+            document.getElementById('userInput').value = optionText;
+            document.getElementById('chat-form').submit();
+        };
+    </script>
+}
